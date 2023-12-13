@@ -1,0 +1,230 @@
+---
+title: 'STA 445 Final Exam'
+author: "Michael Rivera"
+date: "`r format(Sys.time(),  '%B %d, %Y')`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE, echo=FALSE, eval=TRUE, message=FALSE, warning=FALSE}
+### Put your packages here!
+library(tidyverse)
+library(ggplot2)
+library(rvest)
+library(ggrepel)
+library(readxl)
+library(lubridate)
+library(patchwork)
+library(devtools)
+library(roxygen2)
+library(testthat)
+library(usethis)
+
+```
+
+# Exam Questions
+
+## Question 1 [25 points]
+
+I am interested in the average attendance at each World Cup dependent on the host country.  
+
+**a.** Scrape this information from the Wikipedia page: 'https://en.wikipedia.org/wiki/FIFA_World_Cup'. Provide the code for obtaining the proper table from the Wikipedia page.
+
+```{r}
+url = 'https://en.wikipedia.org/wiki/FIFA_World_Cup'
+
+page <- read_html(url)
+
+tablelist <- page %>%
+    html_nodes('table')
+
+wc.attendance <-
+  page %>%
+  html_nodes('table') %>%
+  .[[4]] %>%
+  html_table(header = FALSE, fill = TRUE)
+
+wc.slice <- slice(wc.attendance, 3:24)
+
+wc.slice
+  
+```
+
+**b.** Clean the data you have scraped to include the following columns: `Year`, `Hosts`, `Matches`, `Totalattendance`, and `Averageattendance`. Assign the data.frame to the object `World_Cup`. You will either need to make your own column names or properly clean the strings given for the column names (they contain special characters that should not be retained). 
+
+Remove commas from numerical values and ensure the Attendance columns are properly formatted as numerical data. 
+
+Keep the `Year` variable as strings or factors. Remove data related to any World Cups that have not occurred and the Overall statistics. Show the `head()` of `World_Cup` when finished.
+
+```{r}
+World_Cup <- wc.slice %>%
+  select(1, 2, 4, 5, 6) %>%
+  magrittr::set_colnames(c('Year', 'Hosts', 'Totalattendance', 'Matches', 'Averageattendance'))
+
+World_Cup$Totalattendance <- as.numeric(str_remove_all(World_Cup$Totalattendance,','))
+World_Cup$Averageattendance <- as.numeric(str_remove_all(World_Cup$Averageattendance,','))
+World_Cup$Matches <- as.numeric(World_Cup$Matches)
+
+head(World_Cup)
+```
+
+**c.** Some countries have hosted multiple World Cups. Make unique identifiers for each World Cup by pasting together the Host and Year. Create a new column named `WorldCup` that contains these unique identifiers (i.e. `Uruguay1930`). Remove any remaining spaces in the `WorldCup` names. Remove the `Hosts` and `Year` columns when finished.
+
+```{r}
+World_Cup <- World_Cup %>%
+  mutate(
+    WorldCup = paste(World_Cup$Hosts, World_Cup$Year, sep = '')
+  )
+
+World_Cup <- World_Cup %>% select(3:6)
+
+
+World_Cup
+```
+
+**d.** Display the head of the data frame `World_Cup`.
+
+```{r}
+head(World_Cup)
+```
+
+**e.** Display the `str()` structure of the data frame `World_Cup`. There should be 22 rows and 4 columns!
+
+```{r}
+str(World_Cup)
+```
+
+**f.** Create a column graph displaying `WorldCup` against the `Averageattendance`. Arrange the graph such that the bars are ordered by average attendance. Make sure the `WorldCup` identifiers are visible on the graph (i.e. you can read them). Clean up the axes such that they read `World Cup Host and Year` and `Average Attendance`.
+
+```{r}
+wc.plot <- ggplot(World_Cup, aes(x = reorder(WorldCup, Averageattendance), y = Averageattendance)) +
+  geom_col() +
+  labs( x = 'World Cup Host and Year',
+        y = 'Average Attendance') +
+  theme(axis.text.x = element_text(angle=270))
+
+wc.plot
+```
+
+## Question 2 [20 points]
+
+Considering the average attendance at World Cup matches got me thinking about world population.  I was able to find an excel file from the United Nations tracking estimated populations for all countries that are part of the UN.  This data is available as `World_Populations.xlsx` within the `Final Exam` assignment folder.
+
+**a.** Load the data frame the `ESTIMATES` tab.  Be sure to skip any uninformative lines.
+
+```{r}
+data1 <- read_excel('data-raw/World_Population.xlsx')
+data2 <- read_excel('data-raw/World_Population.xlsx', sheet=1, skip = 16)
+head(data2)
+```
+
+**b.** Using regular expressions and tidyverse commands, clean the data to include only population information from `1950` to `2020` for all countries.  Remove all extra information regarding regions, subregions, income, etc.  Retain only the `Country Name` and population estimates for years `1950` to `2020`. Name this data.frame `WorldPopulation` and show the `head()` when finished.
+
+```{r}
+data3 <- data2 %>%
+  select(3, 8:78)
+data4 <- data3 %>%
+  slice(27:289)
+ 
+WorldPopulation <- rename(data4, 'CountryName' = 'Region, subregion, country or area *')
+head(WorldPopulation)
+```
+
+**c.** Create a single panel graph displaying `Year` against `Population` for `Brazil`, `Mexico`, and `Italy`. Use different colors for the three countries. Properly label the axes.
+
+```{r}
+WorldPopulation2 <- WorldPopulation %>% slice(158, 164, 239)
+
+WorldPopulation3 <- WorldPopulation2 %>%
+  pivot_longer(
+    '1950':'2020',
+    names_to = 'Year',
+    values_to = 'Population'
+  )
+
+WorldPopulation3$Population <- as.numeric(WorldPopulation3$Population)
+
+WorldPopulation3$Year <- as.numeric(WorldPopulation3$Year)
+
+head(WorldPopulation3)
+
+WorldPopPlot <- ggplot(WorldPopulation3, aes(x=Year, y=Population, color=CountryName)) +
+  geom_line()
+
+WorldPopPlot
+```
+
+**d.** Apply a theme of your choice to the graph in part **(c)**.
+
+```{r}
+WorldPopPlot2 <- WorldPopPlot + theme_dark()
+WorldPopPlot2
+```
+
+## Question 3 [20 points]
+
+I want to be able to easily graph any of the UN countries given in the Excel file for Question 2.  My preference would be to just enter a country name and obtain a graph of the population from `1950` to `2020`.
+
+**a.**  Produce a function that uses the `WorldPopulation` data.frame from Question 2 part (b) to generate a graph of any countries population over time. That is,  `WorldPopulation` should NOT be an input variable.  The function should only take as input a country name (as a string - such as `Italy`) and return the population against year graph for that country. The name of the country should be within the title of the graph and the axes should be properly labeled. Name this function `CountryPopulation`. 
+
+*Hint: Wrap up what you did Question 2c into a function that returns an object that is a ggplot. Remove any options for color.  Add an option for title that uses the input string.  This should produce a black and white graph with the name of the country at the top.*
+
+```{r}
+CountryPopulation <- function(country) {
+  WorldPopulation.2 <- WorldPopulation %>%
+    filter(CountryName == country)
+  
+  WorldPopulation.3 <- WorldPopulation.2 %>%
+    pivot_longer(
+      '1950':'2020',
+      names_to = 'Year',
+      values_to = 'Population'
+    )
+  WorldPopulation.3$Population <- as.numeric(WorldPopulation.3$Population)
+  WorldPopulation.3$Year <- as.numeric(WorldPopulation.3$Year)
+  
+  CountryPlot <- ggplot(WorldPopulation.3, aes(x=Year, y=Population)) +
+    geom_line() +
+    labs(title = country)
+    
+  return(CountryPlot)
+}
+```
+
+**b.** Using your function `CountryPopulation` produce graphs for `United States of America`, `Russian Federation`, `China`, and `United Kingdom`.  Store these as objects to be used in part **(c)**.  Display the graph for `United Kingdom`.
+
+```{r}
+p1 <- CountryPopulation('United States of America')
+p2 <- CountryPopulation('Russian Federation')
+p3 <- CountryPopulation('China')
+p4 <- CountryPopulation('United Kingdom')
+p4
+```
+
+**c.** Using the `cowplot` package combine the four graphs from part **(b)** into a single graph.
+
+```{r}
+BigPlot <- cowplot::plot_grid(p1, p2, p3, p4)
+BigPlot
+```
+
+## Question 4 [25 points]
+
+*To receive credit for the below work, provide the link to your GitHub package within your submission PDF.*
+
+We now have some really interesting World Cup and World Population data as well as a function that allows us to view any population graphs of UN countries. Let's package this up with some additional troubleshooting. Follow the steps below and ensure you upload the package to your GitHub account. I would recommend double checking this works in some way - you CANNOT ask a classroom peer to do this as we did for the Chapter 16 assignment.
+
+**a.** Initialize a new package named `YourLastNameWorldPopulation`.
+
+**b.** Add the `World_Population.xlsx` file to the `data-raw` folder.
+
+**c.** Using your cleaning script from **Question 2b**, add the cleaned version of your `WorldPopulation` data to the package. Document the data set.
+
+**d.** Add your cleaned `World_Cup` data, with documentation, to your package.
+
+**e.** Add to your package the function `CountryPopulation`.  Be sure to include a description for the documentation. Update the function such that if provided a country name that does not exist within your `World_Population` data, the function will return an error.
+
+**f.** Produce a unit test to the package to check if a country name entered is in the cleaned data file `WorldPopulation`.  If the country is not present, then the function `CountryPopulation` should return an error.
+
+**g.** Compile your package and upload to your GitHub within the repository `YourLastNameWorldPopulation`. 
+
+**h.** As a solution to Question 4, provide the link to your GitHub package. The package should be able to install directly from GitHub to receive credit for this question. Your package should include the following items, with documentation, when finished: `WorldPopulation`, `World_Cup`, `CountryPopulation`.

@@ -1,0 +1,14 @@
+Package: RiveraWorldPopulation
+Type: Package
+Title: This is my STA445 final
+Version: 0.1.0
+Author: Michael Rivera
+Maintainer: The package maintainer <yourself@somewhere.net>
+Description: This package contains datasets of world cup attendance and global population by country
+    It also includes a function that graphs country population over time based on user input (string)
+License: What license is it under?
+Encoding: UTF-8
+LazyData: true
+Depends: 
+    R (>= 2.10)
+RoxygenNote: 7.2.3
